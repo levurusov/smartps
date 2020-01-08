@@ -39,41 +39,10 @@ public:
 	// longitude will be set to 999 degrees.
 	void clear(void);
 
-	// Navigation system, N=GNSS, P=GPS, L=GLONASS, A=Galileo, '\0'=none
-	//char getNavSystem(void) const {
-	//	return _navSystem;
-	//}
-
-	//uint8_t getNumSatellites(void) const {
-	//	return _numSat;
-	//}
-
-	// Horizontal dilution of precision, in tenths
-	//uint8_t getHDOP(void) const {
-	//	return _hdop;
-	//}
-
 	// Validity of latest fix
 	bool isValid(void) const {
 		return _isValid;
 	}
-
-	// Latitude in millionths of a degree. North is positive.
-	//long getLatitude(void) const {
-	//	return _latitude;
-	//}
-
-	// Longitude in millionths of a degree. East is positive.
-	//long getLongitude(void) const {
-	//	return _longitude;
-	//}
-
-	// Altitude in millimetres.
-	//bool getAltitude(long &alt) const {
-	//	if (_altitudeValid)
-	//		alt = _altitude;
-	//	return _altitudeValid;
-	//}
 
 	uint16_t getYear(void) const {
 		return _year;
@@ -99,17 +68,29 @@ public:
 		return _second;
 	}
 
-	uint8_t getHundredths(void) const {
-		return _hundredths;
-	}
+  uint8_t getPowerOnHour(void) const {
+    return _power_on_hour;
+  }
 
-//	long getSpeed(void) const {
-//		return _speed;
-//	}
+  uint8_t getPowerOnMinute(void) const {
+    return _power_on_minute;
+  }
 
-//	long getCourse(void) const {
-//		return _course;
-//	}
+  uint8_t getPowerOnSecond(void) const {
+    return _power_on_second;
+  }
+
+  uint8_t getPowerOffHour(void) const {
+    return _power_off_hour;
+  }
+
+  uint8_t getPowerOffMinute(void) const {
+    return _power_off_minute;
+  }
+
+  uint8_t getPowerOffSecond(void) const {
+    return _power_off_second;
+  }
 
 	bool process(char c);
 
@@ -142,10 +123,9 @@ protected:
 		return c == '*' || c == '\0' || c == '\r' || c == '\n';
 	}
 
-	const char* parseTime(const char* s);
+	const char* parseTime(const char* s, int destination);
 	const char* parseDate(const char* s);
 
-	//bool processGGA(const char *s);
 	bool processNBLL(const char* s);
 
 private:
@@ -161,16 +141,11 @@ private:
 	char _messageID[6];
 
 	// Variables parsed and kept for user
-	//char _navSystem;
 	bool _isValid;
-	//long _latitude, _longitude; // In millionths of a degree
-	//long _altitude; // In millimetres
-	//bool _altitudeValid;
-	//long _speed, _course;
 	uint16_t _year;
-	uint8_t _month, _day, _hour, _minute, _second, _hundredths;
-	//uint8_t _numSat;
-	//uint8_t _hdop;
+	uint8_t _month, _day, _hour, _minute, _second;
+  uint8_t _power_on_hour, _power_on_minute, _power_on_second;
+  uint8_t _power_off_hour, _power_off_minute, _power_off_second;
 
 	void (*_badChecksumHandler)(const myNMEA &nmea);
 	void (*_unknownSentenceHandler)(const myNMEA &nmea);

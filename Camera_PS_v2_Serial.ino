@@ -48,22 +48,15 @@
 
 //INA219 sensor library
 #include <Adafruit_INA219.h>
-
-/* DHT11 sensor (TODO)
-#include <DHT.h>
-#include <DHT_U.h>
-
-#define DHTPIN 2
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
-*/
-
 #include <stdio.h>
 #include <avr/wdt.h>
 
 //Local includes
 #include "config.h"
 #include "myNMEA.h"
+
+#define CAMERA_EN_PIN 12
+#define MODEM_EN_PIN 11
 
 Adafruit_INA219 sensor_acc;
 Adafruit_INA219 sensor_solar(0x41);//additional address jumper soldered to use 2 sensors
@@ -79,6 +72,9 @@ char s_solar_current_mA[MAX_NUMERIC_CHARS];
 unsigned char timeIsInSync = 0;
 
 char txNMEABuffer[NMEA_BUFFER_LENGTH];
+char rxNMEABuffer[NMEA_BUFFER_LENGTH];
+myNMEA nmea(rxNMEABuffer, sizeof(rxNMEABuffer));
+
 void rminitialspaces(char* arr) {
   char tmp [MAX_NUMERIC_CHARS];
   unsigned char j=0;
@@ -90,6 +86,41 @@ void rminitialspaces(char* arr) {
     }
   }
   strncpy(arr,tmp,MAX_NUMERIC_CHARS-1);
+}
+
+void powerModemOff() {
+  digitalWrite(MODEM_EN_PIN, LOW);
+}
+
+void powerModemOn() {
+  digitalWrite(MODEM_EN_PIN, HIGH);
+}
+
+void powerLinuxBoardOff() {
+  //Set UART pins to low to avoid powering linux board through them
+  Serial.end();
+  pinMode(0, OUTPUT);
+  digitalWrite(0, LOW);
+  pinMode(1, OUTPUT);
+  digitalWrite(1, LOW);
+  digitalWrite(CAMERA_EN_PIN, LOW);
+}
+
+void powerLinuxBoardOn() {
+  digitalWrite(CAMERA_EN_PIN, LOW);
+  delay(500);
+  digitalWrite(CAMERA_EN_PIN, HIGH);
+  pinMode(0, INPUT);//maybe not needed
+  pinMode(1, INPUT);//maybe not needed
+  Serial.begin(UART_RATE);
+}
+
+void restartSystem() {
+  powerModemOff();
+  powerLinuxBoardOff();
+  delay(1000);
+  powerLinuxBoardOn();
+  powerModemOn();
 }
 
 void processSensors() {
@@ -121,64 +152,56 @@ void buildPNBLPSentence() {//Place actual data into txNMEABuffer
 
 
 void setup() {
-  Serial.begin(UART_RATE);
-  Serial.println(F("Started power supply."));
+  pinMode(CAMERA_EN_PIN, OUTPUT);
+  pinMode(MODEM_EN_PIN, OUTPUT);
+  restartSystem();
   wdt_enable(WDTO_8S);
-//  dht.begin();
   sensor_acc.begin();
   sensor_solar.begin();
-  //setTime(0);
   pinMode(13, OUTPUT);//Red LED
 }
 
 void loop() {
   static unsigned int actionCounter=0;//for LED blinking and some periodical actions
-  static unsigned int numOfBlinks=4;//Heartbeat blinking: how many pulses will be occur every 2s (max up to 4)
+  static enum _numOfBlinks {CAMERA_OFF=1,CAMERA_ON,NOTIME} numOfBlinks = NOTIME;
+  if(timeStatus()!= timeSet)
+    numOfBlinks = NOTIME;
+  else {
+    if(digitalRead(CAMERA_EN_PIN)==HIGH)
+      numOfBlinks = CAMERA_ON;
+    else
+      numOfBlinks = CAMERA_OFF;
+  }
+    
   wdt_reset();
   delay(100);//100ms main loop delay
+
+
+  if(nmea.isValid() && (timeStatus()!= timeSet) ) {
+    setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
+  }
   
-  if( (actionCounter%4 == 0) && (actionCounter/4 < numOfBlinks) ) digitalWrite(13, HIGH); else digitalWrite(13, LOW);
-  actionCounter=( actionCounter<20 ? actionCounter+1 : 0 );
+  if( (actionCounter%4 == 0) && (actionCounter/4 < numOfBlinks) )
+    digitalWrite(LED_BUILTIN, HIGH);
+  else
+    digitalWrite(LED_BUILTIN, LOW);
+  actionCounter=( actionCounter<20 ? actionCounter+1 : 0 );//2s total period
   if(actionCounter==0) {//generate NMEA string
     buildPNBLPSentence();
     Serial.println(txNMEABuffer);
   }
   if(actionCounter==10) processSensors();
-  //myNMEA::sendSentence(Serial, "$PNBLP");
-/*
 
-  Serial.print("ACC Bus Voltage:   "); Serial.print(acc_busvoltage); Serial.println(" V");
-  Serial.print("ACC Current:       "); Serial.print(acc_current_mA); Serial.println(" mA");
-  Serial.print("ACC Power:         "); Serial.print(acc_power_mW); Serial.println(" mW");
-  Serial.println("");
-  Serial.print("SOLAR Bus Voltage:   "); Serial.print(solar_busvoltage); Serial.println(" V");
-  Serial.print("SOLAR Current:       "); Serial.print(solar_current_mA); Serial.println(" mA");
-  Serial.print("SOLAR Power:         "); Serial.print(solar_power_mW); Serial.println(" mW");
-  Serial.println("");
-*/
-/*  
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
-  float f = dht.readTemperature(true);
 
-  if (isnan(h) || isnan(t) || isnan(f)) {
-    Serial.println(F("Failed to read from DHT sensor!"));
-    return;
+  while (Serial.available())
+  {
+    //Fetch the character one by one
+    char c = Serial.read();
+    //Pass the character to the library
+    nmea.process(c);
   }
 
-  float hif = dht.computeHeatIndex(f, h);
-  float hic = dht.computeHeatIndex(t, h, false);
 
-  Serial.print(F("Humidity: "));
-  Serial.print(h);
-  Serial.print(F("%  Temperature: "));
-  Serial.print(t);
-  Serial.print(F("°C "));
-  Serial.print(f);
-  Serial.print(F("°F  Heat index: "));
-  Serial.print(hic);
-  Serial.print(F("°C "));
-  Serial.print(hif);
-  Serial.println(F("°F"));
- */
+
+
 }

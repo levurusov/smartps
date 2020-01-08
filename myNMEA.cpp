@@ -175,17 +175,12 @@ void myNMEA::setBuffer(void* buf, uint8_t len)
 
 void myNMEA::clear(void)
 {
-//	_navSystem = '\0';
-//	_numSat = 0;
-//	_hdop = 255;
 	_isValid = false;
-//	_latitude = 999000000L;
-//	_longitude = 999000000L;
-//	_altitude = _speed = _course = LONG_MIN;
-//	_altitudeValid = false;
 	_year = _month = _day = 0;
 	_hour = _minute = _second = 99;
-	_hundredths = 0;
+  _power_on_hour = _power_on_minute = _power_on_second = 99;
+  _power_off_hour = _power_off_minute = _power_off_second = 99;
+
 }
 
 
@@ -200,20 +195,13 @@ bool myNMEA::process(char c)
 
 		if (*_buffer == '$' && testChecksum(_buffer)) {
 			// Valid message
+      Serial.println("Valid message");
 			const char* data;
-			if (_buffer[1] == 'G') {
-				_talkerID = _buffer[2];
-				data = parseField(&_buffer[3], &_messageID[0], sizeof(_messageID));
-			}
-			else {
-				_talkerID = '\0';
-				data = parseField(&_buffer[1], &_messageID[0], sizeof(_messageID));
-			}
-
-			if (strcmp(&_messageID[0], "GGA") == 0)
-				;//return processGGA(data);
-			else if (strcmp(&_messageID[0], "RMC") == 0)
-				;//return processRMC(data);
+		  _talkerID = '\0';
+			data = parseField(&_buffer[1], &_messageID[0], sizeof(_messageID));
+      Serial.println(_messageID);
+			if (strcmp(&_messageID[0], "PNBLL") == 0)
+				return processNBLL(data);
 			else if (_unknownSentenceHandler)
 				(*_unknownSentenceHandler)(*this);
 		}
@@ -223,7 +211,7 @@ bool myNMEA::process(char c)
 		}
 		// Return true for a complete, non-empty, sentence (even if not a valid one).
 		return *_buffer != '\0'; //
-	}
+	}//~End of sentence delimiter
 	else {
 		*_ptr = c;
 		if (_ptr < &_buffer[_bufferLen - 1])
@@ -234,15 +222,32 @@ bool myNMEA::process(char c)
 }
 
 
-const char* myNMEA::parseTime(const char* s)
+const char* myNMEA::parseTime(const char* s,int destination)
 {
-	if (*s == ',')
+  //destination: 0 - current time, 1 - power on time, 2 - power of time
+	if ((*s == ',') || (destination<0) || (destination>2))
 		return skipField(s);
-	_hour = parseUnsignedInt(s, 2);
-	_minute = parseUnsignedInt(s + 2, 2);
-	_second = parseUnsignedInt(s + 4, 2);
-	_hundredths = parseUnsignedInt(s + 7, 2);
-	return skipField(s + 9);
+  switch(destination)
+  {
+    case 0:
+    	_hour = parseUnsignedInt(s, 2);
+    	_minute = parseUnsignedInt(s + 2, 2);
+    	_second = parseUnsignedInt(s + 4, 2);
+      break;
+    case 1:
+      _power_on_hour = parseUnsignedInt(s, 2);
+      _power_on_minute = parseUnsignedInt(s + 2, 2);
+      _power_on_second = parseUnsignedInt(s + 4, 2);
+      break;
+    case 2:
+      _power_off_hour = parseUnsignedInt(s, 2);
+      _power_off_minute = parseUnsignedInt(s + 2, 2);
+      _power_off_second = parseUnsignedInt(s + 4, 2);
+      break;
+    default:
+      break;
+  }
+	return skipField(s + 6);
 }
 
 
@@ -252,75 +257,21 @@ const char* myNMEA::parseDate(const char* s)
 		return skipField(s);
 	_day = parseUnsignedInt(s, 2);
 	_month = parseUnsignedInt(s + 2, 2);
-	_year = parseUnsignedInt(s + 4, 2) + 2000;
-	return skipField(s + 6);
+	_year = parseUnsignedInt(s + 4, 4);
+	return skipField(s + 8);
 }
-
-/*
-bool myNMEA::processGGA(const char *s)
-{
-	// If GxGSV messages are received _talker_ID can be changed after
-	// other myNMEA sentences. Compatibility modes can set the talker ID
-	// to indicate GPS regardless of actual navigation system used.
-	//_navSystem = _talkerID;
-
-	s = parseTime(s);
-	// ++s;
-	_latitude = parseDegreeMinute(s, 2, &s);
-	if (*s == ',')
-		++s;
-	else {
-		if (*s == 'S')
-			_latitude *= -1;
-		s += 2; // Skip N/S and comma
-	}
-	_longitude = parseDegreeMinute(s, 3, &s);
-	if (*s == ',')
-		++s;
-	else {
-		if (*s == 'W')
-			_longitude *= -1;
-		s += 2; // Skip E/W and comma
-	}
-	_isValid = (*s == '1' || *s == '2');
-	s += 2; // Skip position fix flag and comma
-	_numSat = parseFloat(s, 0, &s);
-	_hdop = parseFloat(s, 1, &s);
-	_altitude = parseFloat(s, 3, &s);
-	_altitudeValid = true;
-	// That's all we care about
-	return true;
-}
-*/
 
 bool myNMEA::processNBLL(const char* s)
 {
-/*
-	//_navSystem = _talkerID;
-
-	s = parseTime(s);
+	s = parseTime(s,0);//current time
+  Serial.println(_hour);
+  Serial.println(_minute);
+  Serial.println(_second);
+  s = parseDate(s);
 	_isValid = (*s == 'A');
+  if(_isValid==true) Serial.println("VALID"); else Serial.println("INVALID");
 	s += 2; // Skip validity and comma
-	_latitude = parseDegreeMinute(s, 2, &s);
-	if (*s == ',')
-		++s;
-	else {
-		if (*s == 'S')
-			_latitude *= -1;
-		s += 2; // Skip N/S and comma
-	}
-	_longitude = parseDegreeMinute(s, 3, &s);
-	if (*s == ',')
-		++s;
-	else {
-		if (*s == 'W')
-			_longitude *= -1;
-		s += 2; // Skip E/W and comma
-	}
-	_speed = parseFloat(s, 3, &s);
-	_course = parseFloat(s, 3, &s);
-	s = parseDate(s);
-	// That's all we care about
- */
+	s = parseTime(s,1);//power on time
+  s = parseTime(s,2);//power off time
 	return true;
 }
