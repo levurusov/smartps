@@ -55,9 +55,6 @@
 #include "config.h"
 #include "myNMEA.h"
 
-#define CAMERA_EN_PIN 12
-#define MODEM_EN_PIN 11
-
 Adafruit_INA219 sensor_acc;
 Adafruit_INA219 sensor_solar(0x41);//additional address jumper soldered to use 2 sensors
 
@@ -107,8 +104,6 @@ void powerLinuxBoardOff() {
 }
 
 void powerLinuxBoardOn() {
-  digitalWrite(CAMERA_EN_PIN, LOW);
-  delay(500);
   digitalWrite(CAMERA_EN_PIN, HIGH);
   pinMode(0, INPUT);//maybe not needed
   pinMode(1, INPUT);//maybe not needed
@@ -164,6 +159,9 @@ void setup() {
 void loop() {
   static unsigned int actionCounter=0;//for LED blinking and some periodical actions
   static enum _numOfBlinks {CAMERA_OFF=1,CAMERA_ON,NOTIME} numOfBlinks = NOTIME;
+  static unsigned long secNow, secPowerOn, secPowerOff;
+  static bool cameraEnabledByTimetable;
+  static bool cameraIsPowered=true;
   if(timeStatus()!= timeSet)
     numOfBlinks = NOTIME;
   else {
@@ -189,6 +187,29 @@ void loop() {
   if(actionCounter==0) {//generate NMEA string
     buildPNBLPSentence();
     Serial.println(txNMEABuffer);
+    //decide camera and modem power status
+    secNow=hour()*3600+minute()*60+second();
+    secPowerOn=nmea.getPowerOnHour()*3600+nmea.getPowerOnMinute()*60+nmea.getPowerOnSecond();
+    secPowerOff=nmea.getPowerOffHour()*3600+nmea.getPowerOffMinute()*60+nmea.getPowerOffSecond();
+    cameraEnabledByTimetable=(secPowerOn>secPowerOff)?( secNow>secPowerOn || secNow<secPowerOff )
+                                                      :( secNow>secPowerOn && secNow<secPowerOff );
+    if(timeStatus()==timeSet)//we can turn camera off only after sync time
+    {
+      if(cameraEnabledByTimetable!=cameraIsPowered)
+      {
+        if(cameraEnabledByTimetable)
+        {
+          powerLinuxBoardOn();
+          powerModemOn();
+        }
+        else
+        {
+          powerModemOff();
+          powerLinuxBoardOff();
+        }
+        cameraIsPowered=cameraEnabledByTimetable;
+      }
+    }
   }
   if(actionCounter==10) processSensors();
 
