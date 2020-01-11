@@ -1,5 +1,4 @@
 #include "myNMEA.h"
-
 static long exp10(uint8_t b)
 {
 	long r = 1;
@@ -263,6 +262,7 @@ const char* myNMEA::parseDate(const char* s)
 
 bool myNMEA::processNBLL(const char* s)
 {
+  idle_seconds=0;
 	s = parseTime(s,0);//current time
   Serial.println(_hour);
   Serial.println(_minute);

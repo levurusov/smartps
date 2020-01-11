@@ -5,6 +5,8 @@
 
 #include <Arduino.h>
 
+extern unsigned int idle_seconds;
+
 class myNMEA {
 public:
 

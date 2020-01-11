@@ -22,6 +22,7 @@
  *    6) Solar panel voltage, V
  *    7) Solar panel current, mA
  *    8) Checksum
+ *    
  *    From Linux to PS:
  *    
  *           1      2      3 4      5      6
@@ -71,7 +72,7 @@ unsigned char timeIsInSync = 0;
 char txNMEABuffer[NMEA_BUFFER_LENGTH];
 char rxNMEABuffer[NMEA_BUFFER_LENGTH];
 myNMEA nmea(rxNMEABuffer, sizeof(rxNMEABuffer));
-
+unsigned int idle_seconds = 0;
 void rminitialspaces(char* arr) {
   char tmp [MAX_NUMERIC_CHARS];
   unsigned char j=0;
@@ -145,6 +146,30 @@ void buildPNBLPSentence() {//Place actual data into txNMEABuffer
   snprintf(txNMEABuffer+strlen(txNMEABuffer),4,"%s",checksum);
 }
 
+bool isDriftTooLarge(int hr,int min,int sec,int dy, int mnth, int yr){
+  tmElements_t tm;
+  time_t nowIs, fromArg, drift_absolute;
+  if( yr > 99)
+      yr = yr - 1970;
+  else
+      yr += 30;  
+  tm.Year = yr;
+  tm.Month = mnth;
+  tm.Day = dy;
+  tm.Hour = hr;
+  tm.Minute = min;
+  tm.Second = sec;
+  fromArg=makeTime(tm);
+  nowIs=now();
+  if(nowIs>fromArg)
+    drift_absolute=nowIs-fromArg;
+  else
+    drift_absolute=fromArg-nowIs;
+  if(drift_absolute > DRIFT_TOLERANCE)
+    return true;
+  else
+    return false;
+}
 
 void setup() {
   pinMode(CAMERA_EN_PIN, OUTPUT);
@@ -162,6 +187,8 @@ void loop() {
   static unsigned long secNow, secPowerOn, secPowerOff;
   static bool cameraEnabledByTimetable;
   static bool cameraIsPowered=true;
+
+  //LED blinking
   if(timeStatus()!= timeSet)
     numOfBlinks = NOTIME;
   else {
@@ -170,30 +197,41 @@ void loop() {
     else
       numOfBlinks = CAMERA_OFF;
   }
-    
-  wdt_reset();
-  delay(100);//100ms main loop delay
-
-
-  if(nmea.isValid() && (timeStatus()!= timeSet) ) {
-    setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
-  }
-  
   if( (actionCounter%4 == 0) && (actionCounter/4 < numOfBlinks) )
     digitalWrite(LED_BUILTIN, HIGH);
   else
     digitalWrite(LED_BUILTIN, LOW);
+  //~LED blinking
+    
+  wdt_reset();//kick watchdog
+  delay(100);//100ms main loop delay
+  
   actionCounter=( actionCounter<20 ? actionCounter+1 : 0 );//2s total period
-  if(actionCounter==0) {//generate NMEA string
-    buildPNBLPSentence();
-    Serial.println(txNMEABuffer);
+  if(actionCounter==0) {
+    if(cameraIsPowered) {
+      idle_seconds+=2;
+      if(idle_seconds>WDT_TIMEOUT) {
+        idle_seconds=0;
+        restartSystem();
+      }
+      buildPNBLPSentence();
+      Serial.println(txNMEABuffer);
+      if(nmea.isValid()) {
+        if( (timeStatus()!= timeSet)
+        || (idle_seconds<6 && (isDriftTooLarge(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear()))) ) {
+          setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
+        }
+      }
+    }//~cameraIsPowered
+    
     //decide camera and modem power status
     secNow=hour()*3600+minute()*60+second();
     secPowerOn=nmea.getPowerOnHour()*3600+nmea.getPowerOnMinute()*60+nmea.getPowerOnSecond();
     secPowerOff=nmea.getPowerOffHour()*3600+nmea.getPowerOffMinute()*60+nmea.getPowerOffSecond();
     cameraEnabledByTimetable=(secPowerOn>secPowerOff)?( secNow>secPowerOn || secNow<secPowerOff )
                                                       :( secNow>secPowerOn && secNow<secPowerOff );
-    if(timeStatus()==timeSet)//we can turn camera off only after sync time
+
+    if(timeStatus()==timeSet)//we can turn camera off only after synchronizing time
     {
       if(cameraEnabledByTimetable!=cameraIsPowered)
       {
@@ -210,9 +248,8 @@ void loop() {
         cameraIsPowered=cameraEnabledByTimetable;
       }
     }
-  }
+  }//~actionCounter==0
   if(actionCounter==10) processSensors();
-
 
   while (Serial.available())
   {
@@ -221,8 +258,5 @@ void loop() {
     //Pass the character to the library
     nmea.process(c);
   }
-
-
-
 
 }
