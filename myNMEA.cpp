@@ -194,11 +194,11 @@ bool myNMEA::process(char c)
 
 		if (*_buffer == '$' && testChecksum(_buffer)) {
 			// Valid message
-      Serial.println("Valid message");
+      //Serial.println("Valid message");
 			const char* data;
 		  _talkerID = '\0';
 			data = parseField(&_buffer[1], &_messageID[0], sizeof(_messageID));
-      Serial.println(_messageID);
+      //Serial.println(_messageID);
 			if (strcmp(&_messageID[0], "PNBLL") == 0)
 				return processNBLL(data);
 			else if (_unknownSentenceHandler)
@@ -264,12 +264,12 @@ bool myNMEA::processNBLL(const char* s)
 {
   idle_seconds=0;
 	s = parseTime(s,0);//current time
-  Serial.println(_hour);
-  Serial.println(_minute);
-  Serial.println(_second);
+  //Serial.println(_hour);
+  //Serial.println(_minute);
+  //Serial.println(_second);
   s = parseDate(s);
 	_isValid = (*s == 'A');
-  if(_isValid==true) Serial.println("VALID"); else Serial.println("INVALID");
+  //if(_isValid==true) Serial.println("VALID"); else Serial.println("INVALID");
 	s += 2; // Skip validity and comma
 	s = parseTime(s,1);//power on time
   s = parseTime(s,2);//power off time

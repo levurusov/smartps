@@ -189,7 +189,7 @@ void loop() {
   static bool cameraIsPowered=true;
 
   //LED blinking
-  if(timeStatus()!= timeSet)
+  if(timeStatus()== timeNotSet)
     numOfBlinks = NOTIME;
   else {
     if(digitalRead(CAMERA_EN_PIN)==HIGH)
@@ -217,8 +217,7 @@ void loop() {
       buildPNBLPSentence();
       Serial.println(txNMEABuffer);
       if(nmea.isValid()) {
-        if( (timeStatus()!= timeSet)
-        || (idle_seconds<6 && (isDriftTooLarge(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear()))) ) {
+        if( (idle_seconds<6) && (timeStatus()!= timeSet) ) {
           setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
         }
       }
@@ -231,7 +230,7 @@ void loop() {
     cameraEnabledByTimetable=(secPowerOn>secPowerOff)?( secNow>secPowerOn || secNow<secPowerOff )
                                                       :( secNow>secPowerOn && secNow<secPowerOff );
 
-    if(timeStatus()==timeSet)//we can turn camera off only after synchronizing time
+    if(timeStatus()!=timeNotSet)//we can turn camera off only after synchronizing time
     {
       if(cameraEnabledByTimetable!=cameraIsPowered)
       {
