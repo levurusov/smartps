@@ -224,9 +224,9 @@ void loop() {
     }//~cameraIsPowered
     
     //decide camera and modem power status
-    secNow=hour()*3600+minute()*60+second();
-    secPowerOn=nmea.getPowerOnHour()*3600+nmea.getPowerOnMinute()*60+nmea.getPowerOnSecond();
-    secPowerOff=nmea.getPowerOffHour()*3600+nmea.getPowerOffMinute()*60+nmea.getPowerOffSecond();
+    secNow=(unsigned long)hour()*3600UL+(unsigned long)minute()*60UL+(unsigned long)second();
+    secPowerOn=(unsigned long)nmea.getPowerOnHour()*3600UL+(unsigned long)nmea.getPowerOnMinute()*60UL+(unsigned long)nmea.getPowerOnSecond();
+    secPowerOff=(unsigned long)nmea.getPowerOffHour()*3600UL+(unsigned long)nmea.getPowerOffMinute()*60UL+(unsigned long)nmea.getPowerOffSecond();
     cameraEnabledByTimetable=(secPowerOn>secPowerOff)?( secNow>secPowerOn || secNow<secPowerOff )
                                                       :( secNow>secPowerOn && secNow<secPowerOff );
 
