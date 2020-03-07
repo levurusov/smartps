@@ -73,6 +73,8 @@ char txNMEABuffer[NMEA_BUFFER_LENGTH];
 char rxNMEABuffer[NMEA_BUFFER_LENGTH];
 myNMEA nmea(rxNMEABuffer, sizeof(rxNMEABuffer));
 unsigned int idle_seconds = 0;
+int modem_powerup_delay, uart_using_delay;
+
 void rminitialspaces(char* arr) {
   char tmp [MAX_NUMERIC_CHARS];
   unsigned char j=0;
@@ -106,6 +108,7 @@ void powerLinuxBoardOff() {
 
 void powerLinuxBoardOn() {
   digitalWrite(CAMERA_EN_PIN, HIGH);
+  delay(100);//let power source voltage to rise
   pinMode(0, INPUT);//maybe not needed
   pinMode(1, INPUT);//maybe not needed
   Serial.begin(UART_RATE);
@@ -115,8 +118,10 @@ void restartSystem() {
   powerModemOff();
   powerLinuxBoardOff();
   delay(1000);
+  modem_powerup_delay=MODEM_POWERUP_DELAY;
+  uart_using_delay=UART_USING_DELAY;
   powerLinuxBoardOn();
-  powerModemOn();
+  //modem will be powered on after delay expiration in loop()
 }
 
 void processSensors() {
@@ -207,18 +212,36 @@ void loop() {
   delay(100);//100ms main loop delay
   
   actionCounter=( actionCounter<20 ? actionCounter+1 : 0 );//2s total period
-  if(actionCounter==0) {
+
+  if( (actionCounter==0) || (actionCounter==10) ) {//with interval about one second 
+    if(cameraIsPowered) {
+      if(modem_powerup_delay==1) {
+        modem_powerup_delay=0;
+        powerModemOn();//Power up modem here!
+      }
+      else if(modem_powerup_delay>0) modem_powerup_delay--;
+      if(uart_using_delay>0) uart_using_delay--;//don't read from and write to UART when system starts (useful for boards with one UART)
+    }
+  }
+  
+  if(actionCounter==0) {//every 2s
+
     if(cameraIsPowered) {
       idle_seconds+=2;
       if(idle_seconds>WDT_TIMEOUT) {
         idle_seconds=0;
         restartSystem();
       }
-      buildPNBLPSentence();
-      Serial.println(txNMEABuffer);
-      if(nmea.isValid()) {
-        if( (idle_seconds<6) && (timeStatus()!= timeSet) ) {
-          setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
+      if(uart_using_delay==0) {
+        buildPNBLPSentence();
+        Serial.println(txNMEABuffer);
+        if(nmea.isValid()) {
+          if( (idle_seconds<6) && ( (timeStatus()!= timeSet) || 
+                                    (isDriftTooLarge(nmea.getHour(), nmea.getMinute(), nmea.getSecond(),
+                                     nmea.getDay(), nmea.getMonth(), nmea.getYear())) ) ) {
+            
+            setTime(nmea.getHour(), nmea.getMinute(), nmea.getSecond(), nmea.getDay(), nmea.getMonth(), nmea.getYear());
+          }
         }
       }
     }//~cameraIsPowered
@@ -236,8 +259,10 @@ void loop() {
       {
         if(cameraEnabledByTimetable)
         {
+          modem_powerup_delay=MODEM_POWERUP_DELAY;
+          uart_using_delay=UART_USING_DELAY;
           powerLinuxBoardOn();
-          powerModemOn();
+          //modem will be powered on after delay expiration in loop()
         }
         else
         {
@@ -248,14 +273,15 @@ void loop() {
       }
     }
   }//~actionCounter==0
-  if(actionCounter==10) processSensors();
+
+  if(actionCounter==10) processSensors(); //also every 2s
 
   while (Serial.available())
   {
     //Fetch the character one by one
     char c = Serial.read();
     //Pass the character to the library
-    nmea.process(c);
+    if(uart_using_delay==0) nmea.process(c);
   }
 
 }
