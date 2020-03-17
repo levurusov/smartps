@@ -59,14 +59,18 @@
 Adafruit_INA219 sensor_acc;
 Adafruit_INA219 sensor_solar(0x41);//additional address jumper soldered to use 2 sensors
 
-float acc_busvoltage = 0;
+double acc_busvoltage = 0;
 char s_acc_busvoltage[MAX_NUMERIC_CHARS];
-float acc_current_mA = 0;
+
+double acc_current_mA = 0;
 char s_acc_current_mA[MAX_NUMERIC_CHARS];
-float solar_busvoltage = 0;
+
+double solar_busvoltage = 0;
 char s_solar_busvoltage[MAX_NUMERIC_CHARS];
-float solar_current_mA = 0;
+
+double solar_current_mA = 0;
 char s_solar_current_mA[MAX_NUMERIC_CHARS];
+
 unsigned char timeIsInSync = 0;
 
 char txNMEABuffer[NMEA_BUFFER_LENGTH];
@@ -75,15 +79,24 @@ myNMEA nmea(rxNMEABuffer, sizeof(rxNMEABuffer));
 unsigned int idle_seconds = 0;
 int modem_powerup_delay, uart_using_delay;
 
-void rminitialspaces(char* arr) {
+void rmspaces(char* arr, int fieldlen) {
+  bool leading = true;
   char tmp [MAX_NUMERIC_CHARS];
-  unsigned char j=0;
-  for(unsigned char i=0; i<MAX_NUMERIC_CHARS;++i) {
+  unsigned char j=0;//output buffer counter
+  for(unsigned char i=0; i<fieldlen;++i) {
     if(arr[i]!=' ') {
+      leading=false;
       tmp[j]=arr[i];
       ++j;
-      if(tmp[j]=='\0') break;
+      if(tmp[j-1]=='\0') break;
     }
+    else {
+      if(leading)
+        continue;
+      else
+        break;//trailing whitespace
+    }
+    tmp[j]='\0';
   }
   strncpy(arr,tmp,MAX_NUMERIC_CHARS-1);
 }
@@ -126,17 +139,17 @@ void restartSystem() {
 
 void processSensors() {
     acc_busvoltage = sensor_acc.getBusVoltage_V();
-    dtostrf(acc_busvoltage,5, 2, s_acc_busvoltage);
-    rminitialspaces(s_acc_busvoltage);
+    dtostrf(acc_busvoltage,-6, 2, s_acc_busvoltage);
+    rmspaces(s_acc_busvoltage, 6);
     acc_current_mA = sensor_acc.getCurrent_mA();
-    dtostrf(acc_current_mA,7, 2, s_acc_current_mA);
-    rminitialspaces(s_acc_current_mA);
+    dtostrf(acc_current_mA,-6, 0, s_acc_current_mA);
+    rmspaces(s_acc_current_mA, 6);
     solar_busvoltage = sensor_solar.getBusVoltage_V();
-    dtostrf(solar_busvoltage,5, 2, s_solar_busvoltage); 
-    rminitialspaces(s_solar_busvoltage);
+    dtostrf(solar_busvoltage,-6, 2, s_solar_busvoltage); 
+    rmspaces(s_solar_busvoltage, 6);
     solar_current_mA = sensor_solar.getCurrent_mA();
-    dtostrf(solar_current_mA,7, 2, s_solar_current_mA);
-    rminitialspaces(s_solar_current_mA);
+    dtostrf(solar_current_mA,-6, 0, s_solar_current_mA);
+    rmspaces(s_solar_current_mA, 6);
 }
 
 void buildPNBLPSentence() {//Place actual data into txNMEABuffer
